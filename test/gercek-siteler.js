@@ -3,6 +3,9 @@
 const { chromium } = require("playwright");
 const os = require("os"), path = require("path"), fs = require("fs");
 
+// Takılırsa CI'yı süresiz bekletmesin.
+setTimeout(() => { console.error("Test 4 dakikada bitmedi."); process.exit(1); }, 240000).unref();
+
 (async () => {
   const extension = path.resolve(process.argv[2] || ".");
   const profile = fs.mkdtempSync(path.join(os.tmpdir(), "haber-takip-"));
@@ -21,6 +24,8 @@ const os = require("os"), path = require("path"), fs = require("fs");
   let result;
   while (Date.now() < deadline) {
     result = await page.evaluate(() => chrome.runtime.sendMessage({path: "/api/status"}));
+    const done = result.result.sources.filter(source => source.lastSuccess || source.errors).length;
+    console.log(`${Math.round((deadline - Date.now()) / 1000)} sn kaldı · ${done}/${result.result.sources.length} kaynak sonuçlandı`);
     if (result.result.sources.every(source => source.lastSuccess || source.errors)) break;
     await page.waitForTimeout(3000);
   }
