@@ -1,0 +1,18 @@
+{
+  "manifest_version": 3,
+  "name": "Haber Takip (Güncel)",
+  "version": "1.2.0",
+  "description": "Haber Takip hizmetinin topladığı haberleri tek ekranda gösterir.",
+  "action": {
+    "default_title": "Haber Takip"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "permissions": [
+    "storage"
+  ],
+  "host_permissions": [
+    "http://127.0.0.1/*"
+  ]
+}
