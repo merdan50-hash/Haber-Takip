@@ -32,7 +32,7 @@ BROKEN = """<rss><channel><item><title>Bozuk &nbsp; akış</title><link>https://
 
 HTML_WITH_FEED = '<html><head><link rel="alternate" type="application/rss+xml" href="/akis.xml"></head><body></body></html>'
 HTML_NO_FEED = """<html><body><a href="/">Ana sayfa</a>
-<a href="/gundem/2026/10/uzun-bir-haber-basligi-burada-yer-aliyor">Uzun bir haber başlığı burada yer alıyor</a>
+<a href="/gundem/2026/10/uzun-bir-haber-basligi-burada-yer-aliyor"><span>15:14</span> Uzun bir haber başlığı burada yer alıyor</a>
 <a href="https://baska.test/gundem/2026/10/dis-baglanti">Başka sitedeki uzun bir haber başlığı burada</a></body></html>"""
 
 

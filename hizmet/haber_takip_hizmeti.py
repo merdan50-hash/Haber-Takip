@@ -32,7 +32,9 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 VERSION = "1.4.0"
 POLLS = (5, 10, 15, 30, 60, 120, 300)
-USER_AGENT = "Mozilla/5.0 (compatible; HaberTakip/%s; +https://github.com/merdan50-hash/Haber-Takip)" % VERSION
+# Bazı haber siteleri tarayıcıya benzemeyen istekleri 403 ile reddediyor.
+USER_AGENT = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
+              "Chrome/141.0.0.0 Safari/537.36 HaberTakip/" + VERSION)
 MAX_DOWNLOAD = 8 * 1024 * 1024
 MAX_BODY = 16 * 1024 * 1024
 MAX_ARTICLES = 20000
@@ -141,7 +143,7 @@ FEED_ACCEPT = "application/rss+xml, application/atom+xml, application/xml, text/
 
 def fetch(url, timeout=20, headers=None, limit=MAX_DOWNLOAD):
     """(gövde, son adres, içerik türü) döndürür."""
-    headers = dict({"Accept": FEED_ACCEPT}, **(headers or {}))
+    headers = dict({"Accept": FEED_ACCEPT, "Accept-Language": "tr-TR,tr;q=0.9,en;q=0.5"}, **(headers or {}))
     curl = curl_command()
     if curl:
         handle, path = tempfile.mkstemp(prefix="habertakip-")
@@ -303,7 +305,8 @@ def page_headlines(page, base):
     """RSS'i olmayan siteler için ana sayfadaki haber başlığına benzeyen bağlantılar."""
     site, seen, result = host_of(base), set(), []
     for href, text in page.links:
-        link, title = normalize_url(href or "", base), clean_text(text)
+        # Ana sayfalardaki "15:14 Başlık" biçimindeki saat önekini başlıktan ayıkla.
+        link, title = normalize_url(href or "", base), re.sub(r"^\d{1,2}[:.]\d{2}\s+", "", clean_text(text))
         if not link or link in seen or not (25 <= len(title) <= 300):
             continue
         path = urllib.parse.urlsplit(link).path
