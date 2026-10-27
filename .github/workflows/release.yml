@@ -1,9 +1,12 @@
 name: Release
 
-# "v1.2.1" gibi bir etiket gönderildiğinde eklenti zip'ini oluşturup GitHub Release olarak yayınlar.
+# Eklenti zip'ini oluşturup GitHub Release olarak yayınlar.
+# İki yolla çalışır: "v1.2.1" gibi bir etiket göndermek ya da Actions sekmesinden "Run workflow".
+# Elle çalıştırıldığında etiketi manifest.json'daki sürümden kendisi oluşturur.
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -14,15 +17,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Etiket ile manifest sürümünü karşılaştır
+      - name: Sürümü belirle
         id: version
         run: |
           version=$(jq -r .version manifest.json)
-          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+          if [ "$GITHUB_REF_TYPE" = "tag" ] && [ "v$version" != "$GITHUB_REF_NAME" ]; then
             echo "::error::Etiket ($GITHUB_REF_NAME) manifest sürümüyle (v$version) eşleşmiyor."
             exit 1
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
 
       - name: Eklenti paketini oluştur
         run: |
@@ -38,6 +42,12 @@ jobs:
       - name: Release yayınla
         env:
           GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
-          gh release create "$GITHUB_REF_NAME" "haber-takip-${{ steps.version.outputs.version }}.zip" \
-            --title "Haber Takip ${{ steps.version.outputs.version }}" --notes-file notes.md
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "::error::$TAG sürümü zaten yayınlanmış. Yeni sürüm için manifest.json'daki sürümü artırın."
+            exit 1
+          fi
+          gh release create "$TAG" "haber-takip-$VERSION.zip" --target "$GITHUB_SHA" \
+            --title "Haber Takip $VERSION" --notes-file notes.md
