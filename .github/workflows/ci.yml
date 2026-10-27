@@ -28,7 +28,8 @@ jobs:
         timeout-minutes: 6
         run: |
           npm install --no-save playwright@1
-          npx playwright install --with-deps chromium
+          # Ubuntu çalıştırıcısında tarayıcı bağımlılıkları hazır; --with-deps apt beklemesine takılabiliyor.
+          npx playwright install chromium
       - name: Gerçek Chromium'da gerçek haber siteleriyle deneme
         timeout-minutes: 5
         run: node test/gercek-siteler.js dist/haber-takip
