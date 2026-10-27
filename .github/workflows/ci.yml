@@ -11,94 +11,24 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Hizmet testleri
-        run: python3 -m unittest discover -s hizmet -v
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Motor testleri
+        run: node --test test/*.test.js
       - name: Sözdizimi denetimi
         run: |
-          node --check app.js && node --check background.js
-          for f in kurulum/*.sh kurulum/*.command; do bash -n "$f"; done
-          python3 -c "import json; json.load(open('manifest.json'))"
+          for f in app.js background.js motor.js; do node --check "$f"; done
+          node -e "JSON.parse(require('fs').readFileSync('manifest.json'))"
       - name: Paketleme
         run: ./paketle.sh
+      - name: Gerçek Chromium'da gerçek haber siteleriyle deneme
+        run: |
+          npm install --no-save playwright@1
+          npx playwright install --with-deps chromium
+          node test/gercek-siteler.js dist/haber-takip
       - uses: actions/upload-artifact@v4
-        with:
-          name: kurulum-paketi
-          path: dist/haber-takip-kurulum-*.zip
-
-  # Kurulum paketini her işletim sisteminde gerçekten kurar, gerçek haber siteleriyle dener ve kaldırır.
-  kurulum:
-    needs: test
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [windows-latest, macos-latest, ubuntu-latest]
-    runs-on: ${{ matrix.os }}
-    env:
-      HABER_TAKIP_SESSIZ: "1"
-      HABER_TAKIP_SIL: "e"
-      PYTHONIOENCODING: utf-8
-      BEKLENEN_PORT: "18766"
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
-        with:
-          name: kurulum-paketi
-      - name: Paketi aç
-        shell: bash
-        run: |
-          PY=$(command -v python3 || command -v python)
-          "$PY" -c "import zipfile,glob,os; zipfile.ZipFile(glob.glob('haber-takip-kurulum-*.zip')[0]).extractall(os.path.join(os.path.expanduser('~'), 'Downloads'))"
-          chmod +x ~/Downloads/HaberTakip/*.sh ~/Downloads/HaberTakip/*.command
-      - name: 18765'i başka bir programla doldur (kurulum boş bağlantı noktasına geçmeli)
-        shell: bash
-        run: |
-          PY=$(command -v python3 || command -v python)
-          nohup "$PY" -c "import socket,time; s=socket.socket(); s.bind(('127.0.0.1',18765)); s.listen(); time.sleep(3600)" >/dev/null 2>&1 &
-          sleep 2
-
-      - name: Kur ve dene (Linux)
-        if: runner.os == 'Linux'
-        run: |
-          bash ~/Downloads/HaberTakip/kur-linux.sh
-          bash ~/Downloads/HaberTakip/kur-linux.sh > /dev/null   # yeniden kurulum da çalışmalı
-          python3 .github/dogrula.py ~/.local/share/haber-takip ~/HaberTakip/eklenti
-      - name: Kur ve dene (macOS)
-        if: runner.os == 'macOS'
-        run: |
-          bash ~/Downloads/HaberTakip/kur-macos.command
-          bash ~/Downloads/HaberTakip/kur-macos.command > /dev/null
-          python3 .github/dogrula.py ~/"Library/Application Support/HaberTakip" ~/HaberTakip/eklenti
-      - name: Kur ve dene (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          powershell -NoProfile -ExecutionPolicy Bypass -File "$HOME\Downloads\HaberTakip\kur-windows.ps1" -Sessiz
-          if ($LASTEXITCODE) { exit $LASTEXITCODE }
-          powershell -NoProfile -ExecutionPolicy Bypass -File "$HOME\Downloads\HaberTakip\kur-windows.ps1" -Sessiz | Out-Null
-          if ($LASTEXITCODE) { exit $LASTEXITCODE }
-          Get-ScheduledTask -TaskName "HaberTakip Hizmeti" | Format-List TaskName, State
-          python .github/dogrula.py "$env:LOCALAPPDATA\HaberTakip" "$HOME\HaberTakip\eklenti"
-
-      - name: Hizmet günlüğü
         if: always()
-        shell: bash
-        run: |
-          for f in ~/.local/share/haber-takip/hizmet.log ~/Library/Logs/HaberTakip/hizmet.log "$LOCALAPPDATA/HaberTakip/hizmet.log"; do
-            [ -f "$f" ] && cat "$f"
-          done
-          true
-
-      - name: Kaldır
-        shell: bash
-        run: |
-          case "$RUNNER_OS" in
-            Linux)   bash ~/Downloads/HaberTakip/kaldir-linux.sh ;;
-            macOS)   bash ~/Downloads/HaberTakip/kaldir-macos.command ;;
-            Windows) powershell -NoProfile -ExecutionPolicy Bypass -File "$(cygpath -w ~/Downloads/HaberTakip/kaldir-windows.ps1)" -Sil ;;
-          esac
-          sleep 3
-          PY=$(command -v python3 || command -v python)
-          if "$PY" -c "import socket,sys; sys.exit(socket.socket().connect_ex(('127.0.0.1',int(open('port.txt').read())))!=0)"; then
-            echo "Hizmet kaldırıldıktan sonra hâlâ çalışıyor"; exit 1
-          fi
-          echo "Hizmet kapalı."
+        with:
+          name: ekran-goruntusu
+          path: ekran.png

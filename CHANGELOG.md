@@ -1,5 +1,12 @@
 # Haber Takip — Değişiklikler
 
+## 2.0.0
+- **Kurulum gerektirmeyen eklenti.** Haberleri artık eklentinin kendisi çekiyor; yerel hizmet, Python, kurulum aracı ve bağlantı noktası kaldırıldı. Eklentiyi tarayıcıya yüklemek yeterli; her işletim sisteminde aynı şekilde çalışır.
+- Sayfa kapalıyken de arka planda 30 saniyede bir tarar; okunmamış haber sayısı araç çubuğu simgesinde görünür.
+- Yeni eklenen site sırasını beklemeden hemen taranır; yavaş bir site diğerlerini bekletmez.
+- GitHub'da yeni sürüm çıkınca sayfada indirme bağlantısı görünür.
+- 1.x'te tarayıcıda saklanan site listesi ilk açılışta aktarılır. 1.3–1.4'teki yerel hizmet artık gerekmez; kaldırma araçlarıyla kaldırılabilir.
+
 ## 1.4.2
 - Linux kurulum aracı `sudo` ile çalıştırıldığında durur ve normal kullanıcıyla nasıl çalıştırılacağını gösterir. Root olarak kurulumda eklenti klasörü `/root` altına gidiyor, normal kullanıcıyla açılan tarayıcı onu okuyamıyordu.
 

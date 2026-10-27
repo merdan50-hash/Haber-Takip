@@ -1,7 +1,7 @@
 name: Release
 
-# Testleri çalıştırır, eklenti ve kurulum paketlerini oluşturup GitHub Release olarak yayınlar.
-# Kurulu hizmetler yeni Release'i en geç 15 dakika içinde görüp kendini günceller.
+# Testleri çalıştırır, eklenti paketini oluşturup GitHub Release olarak yayınlar.
+# Eklenti yeni sürümü 6 saatte bir denetler ve sayfasında indirme bağlantısı gösterir.
 # İki yolla çalışır: "v1.2.1" gibi bir etiket göndermek ya da Actions sekmesinden "Run workflow".
 # Elle çalıştırıldığında etiketi manifest.json'daki sürümden kendisi oluşturur.
 on:
@@ -18,6 +18,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
       - name: Sürümü belirle
         id: version
         run: |
@@ -30,12 +34,9 @@ jobs:
           echo "tag=v$version" >> "$GITHUB_OUTPUT"
 
       - name: Testler
-        run: |
-          python3 -m unittest discover -s hizmet -v
-          node --check app.js && node --check background.js
-          for f in kurulum/*.sh kurulum/*.command; do bash -n "$f"; done
+        run: node --test test/*.test.js
 
-      - name: Paketleri oluştur
+      - name: Paketi oluştur
         run: ./paketle.sh
 
       - name: Sürüm notlarını CHANGELOG'dan al
@@ -54,5 +55,5 @@ jobs:
             echo "::error::$TAG sürümü zaten yayınlanmış. Yeni sürüm için manifest.json'daki sürümü artırın."
             exit 1
           fi
-          gh release create "$TAG" "dist/haber-takip-kurulum-$VERSION.zip" "dist/haber-takip-eklenti-$VERSION.zip" --target "$GITHUB_SHA" \
+          gh release create "$TAG" "dist/haber-takip-$VERSION.zip" --target "$GITHUB_SHA" \
             --title "Haber Takip $VERSION" --notes-file notes.md

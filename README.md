@@ -1,34 +1,28 @@
-# Haber-Takip
+# Haber Takip
 
-Haber sitelerini ve RSS akışlarını izleyip yeni haberleri tek ekranda gösteren tarayıcı eklentisi ve yerel hizmeti.
+Haber sitelerini ve RSS akışlarını izleyip yeni haberleri tek ekranda gösteren tarayıcı eklentisi. **Kurulum aracı, program ya da hesap gerektirmez**; her şey eklentinin içinde çalışır ve veriler yalnızca sizin tarayıcınızda saklanır.
 
-- **Eklenti** (kök klasör): Manifest V3; Chrome, Edge, Brave, Opera, Vivaldi ve Chromium (116+). Mobil tarayıcılarda çalışmaz.
-- **Hizmet** (`hizmet/`): siteleri arka planda tarayan, yalnızca `http://127.0.0.1:18765` üzerinden erişilen Python programı. Yalnızca standart kütüphaneyi kullanır.
-- **Kurulum araçları** (`kurulum/`): Windows, macOS ve Linux için hizmeti kurup otomatik başlatan, eklentiyi erişim anahtarıyla hazırlayan araçlar.
+- Siteyi yazmanız yeterli: eklenti RSS/Atom akışını kendisi bulur, akışı olmayan sitelerde ana sayfadaki haber başlıklarını izler.
+- Yeni haberler sayfada vurgulanır, okunmamış sayısı araç çubuğu simgesinde görünür; isterseniz sesli uyarı verir.
+- Sayfa kapalıyken de 30 saniyede bir taramaya devam eder.
+- Windows, macOS, Linux ve ChromeOS'ta Chrome, Edge, Brave, Opera ve Vivaldi (Chromium 120+) ile çalışır. Telefon tarayıcıları eklenti desteklemez.
 
-## Kurulum
-[Releases](../../releases) sayfasından `haber-takip-kurulum-<sürüm>.zip` dosyasını indirip açın:
+## Yükleme
+1. [Releases](../../releases/latest) sayfasından `haber-takip-<sürüm>.zip` dosyasını indirip açın.
+2. Tarayıcıda `chrome://extensions` (Edge: `edge://extensions`) sayfasını açın, **Geliştirici modu**nu açın.
+3. **Paketlenmemiş öğe yükle**'ye basıp açtığınız `haber-takip` klasörünü seçin.
+4. Araç çubuğundaki yapboz simgesinden Haber Takip'i sabitleyip tıklayın.
 
-| Sistem | Komut |
-|---|---|
-| Windows 10/11 | `kur-windows.bat` dosyasına çift tıklayın |
-| macOS | `bash ~/Downloads/HaberTakip/kur-macos.command` |
-| Linux | `bash ~/Downloads/HaberTakip/kur-linux.sh` |
-
-Ardından tarayıcıda `chrome://extensions` → **Geliştirici modu** → **Paketlenmemiş öğe yükle** → `~/HaberTakip/eklenti` klasörünü seçin. Ayrıntılar paketteki `BENIOKU.txt` dosyasında.
-
-## Otomatik güncelleme
-Kurulu hizmet 15 dakikada bir bu deponun son Release'ini denetler. Yeni sürümü indirip SHA-256 özetini doğrular, kendini ve eklenti dosyalarını günceller. Eklenti de kendini yeniden yükler. Hizmet Release'leri herkese açık adresten indirir; depo gizliyse hizmet klasörüne okuma yetkili bir GitHub anahtarı içeren `github-token` dosyası konmalıdır.
+Yeni sürüm çıktığında eklenti sayfasında **Yeni sürüm** bağlantısı görünür. Güncellemek için yeni zip'i aynı klasörün üzerine açıp eklentiler sayfasında ↻ simgesine basın; kaynak listeniz ve haberleriniz korunur.
 
 ## Geliştirme
 ```sh
-python3 -m unittest discover -s hizmet   # hizmet testleri
-./paketle.sh                             # dist/ altına yayın paketlerini üretir
+node --test test/*.test.js        # motor testleri
+./paketle.sh                      # dist/haber-takip-<sürüm>.zip
 ```
-Her gönderimde CI, kurulum paketini gerçek Windows, macOS ve Linux makinelerinde kurar, gerçek haber siteleriyle dener ve kaldırır.
+Her gönderimde CI, eklentiyi gerçek Chromium'da yükleyip gerçek haber siteleriyle dener.
 
 ## Yeni sürüm yayınlama
-1. `manifest.json` ve `hizmet/haber_takip_hizmeti.py` içindeki `VERSION` değerini artırın; `CHANGELOG.md`'ye aynı sürüm başlığıyla bölüm ekleyin.
-2. GitHub'da **Actions → Release → Run workflow**. Kurulu tüm hizmetler en geç 15 dakika içinde yeni sürüme geçer.
+`manifest.json`'daki sürümü artırın, `CHANGELOG.md`'ye aynı başlıkla bölüm ekleyin, sonra GitHub'da **Actions → Release → Run workflow**.
 
 Değişiklikler için [CHANGELOG.md](CHANGELOG.md).

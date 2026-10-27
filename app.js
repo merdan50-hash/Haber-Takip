@@ -10,11 +10,10 @@ const PAGE_SIZE = 200;
 const POLLS = [5, 10, 15, 30, 60, 120, 300];
 const BACKUP_KEY = "haberTakipMigrationBackup120";
 const VERSION = chrome.runtime.getManifest().version, TITLE = "Haber Takip";
-const LOOPBACK = new Set(["127.0.0.1"]);
 let sound = false, audio, status = null, articles = [], total = 0, sel = null, query = "", unreadOnly = false;
 let visibleLimit = PAGE_SIZE, generation = 0, articleGeneration = -1, articleRevision = null;
 let refreshing = false, refreshAgain = false, imported = false, importData, connected = false, configBusy = false, ready = false;
-let setupMissing = false, previousUnread = null, unseen = 0, messageKind = "", lastChips = "", messageTimer, searchTimer, reloading = false;
+let previousUnread = null, unseen = 0, messageKind = "", lastChips = "", messageTimer, searchTimer;
 const pendingRead = new Set();
 
 function notify(message, kind = "action") {
@@ -32,55 +31,18 @@ function safeURL(value) {
     return url.href;
   } catch { return null; }
 }
-function setupError(message) {
-  const error = new Error(message);
-  error.setup = true;
-  return error;
-}
-function bridge() {
-  const config = globalThis.HABER_BRIDGE;
-  if (!config || !safeURL(config.url) || typeof config.token !== "string" || !config.token.trim()) {
-    // Kurulum aracı anahtarı yalnızca kendi hazırladığı eklenti klasörüne yazar.
-    const folder = /Windows/i.test(navigator.userAgent) ? "%USERPROFILE%\\HaberTakip\\eklenti" : "~/HaberTakip/eklenti";
-    throw setupError("Bu eklenti, kurulum aracının hazırladığı klasörden yüklenmemiş. Önce kurulum aracını çalıştırın; " +
-      `ardından ${navigator.userAgent.includes("Edg/") ? "edge" : "chrome"}://extensions sayfasında bu Haber Takip kartını kaldırıp ` +
-      `"Paketlenmemiş öğe yükle" ile şu klasörü seçin: ${folder}`);
-  }
-  // Erişim anahtarı yalnızca bu bilgisayardaki hizmete gönderilir.
-  if (!LOOPBACK.has(new URL(config.url).hostname)) {
-    throw setupError("Haber Takip hizmet adresi bu bilgisayarı (127.0.0.1) göstermiyor. Kurulum aracını yeniden çalıştırın.");
-  }
-  return config;
-}
+// Haberleri eklentinin arka plan çalışanı (background.js) çeker; sayfa onunla mesajlaşır.
 async function api(path, method = "GET", body) {
-  if (!ready) throw new Error("Haber Takip bağlantısı hazırlanıyor. Biraz sonra yeniden deneyin.");
-  const config = bridge(), controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 12000);
+  if (!ready) throw new Error("Haber Takip hazırlanıyor. Biraz sonra yeniden deneyin.");
+  let response;
   try {
-    const headers = {Authorization: `Bearer ${config.token}`, Accept: "application/json"};
-    if (body !== undefined) headers["Content-Type"] = "application/json";
-    let response;
-    try {
-      response = await fetch(new URL(path, config.url).href, {
-        method, headers, body: body === undefined ? undefined : JSON.stringify(body),
-        signal: controller.signal, credentials: "omit", cache: "no-store"
-      });
-    } catch (error) {
-      if (error.name === "AbortError") throw new Error("Haber Takip hizmeti 12 saniyede yanıt vermedi. Hizmet bağlantısı yeniden denenecek.");
-      throw new Error("Haber Takip hizmetine bağlanılamıyor. Yerel hizmetin çalıştığını kontrol edin; bağlantı yeniden denenecek.");
-    }
-    const text = await response.text();
-    let result;
-    try { result = text ? JSON.parse(text) : null; } catch { throw new Error("Haber Takip hizmetinden geçersiz yanıt alındı."); }
-    if (!response.ok) {
-      if (response.status === 401 || response.status === 403) throw new Error("Haber Takip hizmet bağlantısının anahtarı geçersiz. Kurulum aracını yeniden çalıştırın.");
-      throw new Error(typeof result?.error === "string" ? result.error.slice(0, 250) : `Haber Takip hizmeti hata döndürdü (HTTP ${response.status}).`);
-    }
-    return result;
-  } catch (error) {
-    if (error.name === "AbortError") throw new Error("Haber Takip hizmeti 12 saniyede yanıt vermedi. Hizmet bağlantısı yeniden denenecek.");
-    throw error;
-  } finally { clearTimeout(timeout); }
+    response = await chrome.runtime.sendMessage({path, method, body});
+  } catch {
+    throw new Error("Haber Takip arka planı yanıt vermedi; yeniden denenecek.");
+  }
+  if (!response) throw new Error("Haber Takip arka planı yanıt vermedi; yeniden denenecek.");
+  if (!response.ok) throw new Error(response.error);
+  return response.result;
 }
 
 function sourceStatus(source) {
@@ -93,7 +55,7 @@ function sourceStatus(source) {
 function chips() {
   const sources = Array.isArray(status?.sources) ? status.sources : [];
   const healthy = sources.filter(source => source.lastSuccess && !source.error && !source.partialError).length;
-  $("#st").textContent = connected ? `${healthy}/${sources.length} kaynak erişilebilir` : setupMissing ? "Kurulum tamamlanmamış" : "Hizmete bağlanılamıyor";
+  $("#st").textContent = connected ? `${healthy}/${sources.length} kaynak erişilebilir` : "Bağlanıyor…";
   $("#live").classList.toggle("off", !connected || healthy === 0);
   const html = sources.map(source => {
     const name = host(source.url), selected = sel === name;
@@ -133,7 +95,7 @@ function render() {
   $("#list").innerHTML = articles.length ? articles.map(item => `<a class="row${item.f && !pendingRead.has(item.k) ? " new" : ""}" href="${esc(item.link)}" target="_blank" rel="noopener noreferrer" data-k="${esc(item.k)}">
     <span class="tm" title="${esc(clockExplanation(item))}">${clockText(item)}<span class="ago">${esc(relativeTime(item))}</span></span>
     <span><span class="sn" style="color:hsl(${hue(item.site)} 62% 46%)">${esc(item.site)}</span><br><span class="ti">${esc(item.title)}</span></span></a>`).join("")
-    : `<div class="empty">${!connected ? "Haber hizmeti bağlantısı bekleniyor." : !status?.sites?.length ? "Başlamak için bir site veya RSS adresi ekleyin." : query || sel || unreadOnly ? "Bu filtrelerle eşleşen haber yok." : "Henüz haber yok."}</div>`;
+    : `<div class="empty">${!connected ? "Haberler yükleniyor…" : !status?.sites?.length ? "Başlamak için bir site veya RSS adresi ekleyin." : query || sel || unreadOnly ? "Bu filtrelerle eşleşen haber yok." : "Henüz haber yok."}</div>`;
   updateCount();
 }
 function tick() {
@@ -155,36 +117,15 @@ function beep() {
     oscillator.start(); oscillator.stop(audio.currentTime + .12);
   } catch { }
 }
-function newer(a, b) {
-  const x = String(a).split(".").map(Number), y = String(b).split(".").map(Number);
-  for (let i = 0; i < Math.max(x.length, y.length); i++) {
-    if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) > (y[i] || 0);
-  }
-  return false;
-}
-// Hizmet eklenti dosyalarını yeni sürüme güncellediyse eklentiyi diskteki yeni sürümle yeniden yükler.
-async function reloadIfUpdated(value) {
-  const next = value.extensionVersion;
-  if (reloading || typeof next !== "string" || !newer(next, VERSION)) return;
-  reloading = true;
-  try {
-    const {reloadedFor} = await chrome.storage.local.get("reloadedFor");
-    if (reloadedFor === next) return; // dosyalar yenilenmemiş; yeniden yükleme döngüsüne girme
-    await chrome.storage.local.set({reloadedFor: next, reopenApp: document.hasFocus() ? "active" : "background"});
-    chrome.runtime.reload();
-  } catch { }
-}
-function updateText(update) {
-  if (!update) return "";
-  if (update.state === "hata") return `Otomatik güncelleme: ${update.error}`;
-  if (update.state === "kapalı") return "Otomatik güncelleme kapalı";
-  return update.latest ? `Otomatik güncelleme açık · GitHub'daki son sürüm ${update.latest}` : "Otomatik güncelleme açık";
+function showUpdate(update) {
+  const link = $("#upd");
+  link.hidden = !update;
+  if (update) { link.href = update.url; link.textContent = `Yeni sürüm: ${update.latest}`; }
 }
 function acceptStatus(value) {
-  if (!value || !Array.isArray(value.sites) || !Array.isArray(value.sources) || value.revision === undefined) throw new Error("Haber hizmetinin durum yanıtı eksik.");
-  status = value; connected = true; setupMissing = false;
-  reloadIfUpdated(value);
-  $("#ver").title = updateText(value.update);
+  if (!value || !Array.isArray(value.sites) || !Array.isArray(value.sources) || value.revision === undefined) throw new Error("Durum yanıtı eksik.");
+  status = value; connected = true;
+  showUpdate(value.update);
   if (!configBusy && POLLS.includes(value.poll)) $("#iv").value = value.poll;
   if (sel && !value.sites.some(url => host(url) === sel)) { sel = null; generation++; visibleLimit = PAGE_SIZE; }
   const unread = Number(value.unread) || 0;
@@ -213,7 +154,7 @@ async function refresh() {
         if (filter.unreadOnly) params.set("unread", "1");
         const page = await api("/api/articles?" + params);
         if (currentGeneration !== generation) return;
-        if (!page || !Array.isArray(page.articles) || !Number.isFinite(page.total) || page.revision === undefined) throw new Error("Haber hizmetinin haber yanıtı eksik.");
+        if (!page || !Array.isArray(page.articles) || !Number.isFinite(page.total) || page.revision === undefined) throw new Error("Haber yanıtı eksik.");
         if (offset === 0) revision = page.revision;
         else if (revision !== page.revision) consistent = false;
         available = Math.max(0, page.total);
@@ -229,8 +170,8 @@ async function refresh() {
       render();
     }
   } catch (error) {
-    connected = false; setupMissing = !!error.setup; chips();
-    notify(error.message || "Haber Takip hizmetine bağlanılamıyor.", "connection");
+    connected = false; chips();
+    notify(error.message || "Haber Takip arka planı yanıt vermedi.", "connection");
     if (!articles.length) render();
   } finally {
     refreshing = false; updateCount();
