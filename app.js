@@ -9,15 +9,20 @@ const hm = value => new Date(value * 1000).toLocaleTimeString("tr-TR", {hour:"2-
 const PAGE_SIZE = 200;
 const POLLS = [5, 10, 15, 30, 60, 120, 300];
 const BACKUP_KEY = "haberTakipMigrationBackup120";
+const VERSION = chrome.runtime.getManifest().version, TITLE = "Haber Takip";
+const LOOPBACK = new Set(["127.0.0.1"]);
 let sound = false, audio, status = null, articles = [], total = 0, sel = null, query = "", unreadOnly = false;
 let visibleLimit = PAGE_SIZE, generation = 0, articleGeneration = -1, articleRevision = null;
 let refreshing = false, refreshAgain = false, imported = false, importData, connected = false, configBusy = false, ready = false;
-let previousUnread = null, unseen = 0, messageKind = "", lastChips = "";
+let previousUnread = null, unseen = 0, messageKind = "", lastChips = "", messageTimer, searchTimer;
 const pendingRead = new Set();
 
 function notify(message, kind = "action") {
   messageKind = kind;
   $("#message").textContent = message;
+  clearTimeout(messageTimer);
+  // Bağlantı hataları sorun sürdükçe görünür kalır; işlem bildirimleri kendiliğinden kaybolur.
+  if (message && kind === "action") messageTimer = setTimeout(() => { if (messageKind === "action") $("#message").textContent = ""; }, 6000);
 }
 function safeURL(value) {
   try {
@@ -29,8 +34,12 @@ function safeURL(value) {
 }
 function bridge() {
   const config = globalThis.HABER_BRIDGE;
-  if (!config || !safeURL(config.url) || typeof config.token !== "string" || !config.token) {
+  if (!config || !safeURL(config.url) || typeof config.token !== "string" || !config.token.trim()) {
     throw new Error("Haber Takip hizmet bağlantısı ayarlanmamış. Kurulum aracını çalıştırın.");
+  }
+  // Erişim anahtarı yalnızca bu bilgisayardaki hizmete gönderilir.
+  if (!LOOPBACK.has(new URL(config.url).hostname)) {
+    throw new Error("Haber Takip hizmet adresi bu bilgisayarı (127.0.0.1) göstermiyor. Kurulum aracını yeniden çalıştırın.");
   }
   return config;
 }
@@ -145,7 +154,7 @@ function acceptStatus(value) {
   const unread = Number(value.unread) || 0;
   if (previousUnread !== null && unread > previousUnread) {
     beep();
-    if (document.hidden) { unseen += unread - previousUnread; document.title = `(${unseen}) Haber Takip 1.2.0`; }
+    if (document.hidden) { unseen += unread - previousUnread; document.title = `(${unseen}) ${TITLE}`; }
   }
   previousUnread = unread;
   chips(); updateCount();
@@ -258,16 +267,23 @@ $("#f").onsubmit = async event => {
   } catch (error) { notify(error.message); }
   finally { button.disabled = false; }
 };
-$("#search").oninput = event => { query = event.target.value.trim().toLocaleLowerCase("tr-TR"); invalidate(true); };
+$("#search").oninput = event => {
+  const value = event.target.value.trim().toLocaleLowerCase("tr-TR");
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => { if (value !== query) { query = value; invalidate(true); } }, 250);
+};
 $("#unread").onclick = event => {
   unreadOnly = !unreadOnly; event.currentTarget.classList.toggle("on", unreadOnly);
   event.currentTarget.setAttribute("aria-pressed", String(unreadOnly)); invalidate(true);
 };
 $("#more").onclick = () => { visibleLimit += PAGE_SIZE; invalidate(); };
 document.addEventListener("visibilitychange", () => {
-  if (!document.hidden) { unseen = 0; document.title = "Haber Takip 1.2.0"; refresh(); }
+  if (!document.hidden) { unseen = 0; document.title = TITLE; refresh(); }
 });
 window.addEventListener("online", refresh);
+
+$("#ver").textContent = VERSION;
+document.title = TITLE;
 
 (async () => {
   const stored = await chrome.storage.local.get(["sites", "feeds", "poll", "articles", "dates", "lastVisit", "prev", "sound", BACKUP_KEY]);

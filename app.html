@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="tr"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Haber Takip 1.2.0</title>
+<title>Haber Takip</title>
 <style>
 :root{--bg:#eef1f5;--fg:#14202e;--mut:#5f6c7b;--line:#d5dce5;--card:#fff;--acc:#1f5eff;--new:#ffb020;--bad:#d23b3b;--ok:#1f9d55}
 @media(prefers-color-scheme:dark){:root{--bg:#0f1620;--fg:#e6edf5;--mut:#8b99aa;--line:#233040;--card:#16202c;--acc:#6ea0ff;--ok:#3ec97a;--bad:#ff6b6b}}
@@ -46,7 +46,7 @@ main{padding:6px max(16px,calc(50% - 480px)) 12px}.pagination{text-align:center;
 </style></head><body>
 <header>
  <div class="top">
-  <h1>Haber Takip <small style="font-size:12px;font-weight:500;color:var(--mut)">1.2.0</small></h1>
+  <h1>Haber Takip <small id="ver" style="font-size:12px;font-weight:500;color:var(--mut)"></small></h1>
   <span class="live" id="live"><i class="dot"></i><span id="st">Bağlanıyor…</span></span>
   <label style="font-size:13px;color:var(--mut)">Tarama <select id="iv"><option value="5">5 sn</option><option value="10">10 sn</option><option value="15">15 sn</option><option value="30">30 sn</option><option value="60">60 sn</option><option value="120">2 dk</option><option value="300">5 dk</option></select></label>
   <button class="btn" id="snd" type="button" aria-pressed="false">Ses kapalı</button>

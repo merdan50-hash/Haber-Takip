@@ -1,10 +1,22 @@
 {
   "manifest_version": 3,
   "name": "Haber Takip (Güncel)",
-  "version": "1.2.0",
+  "short_name": "Haber Takip",
+  "version": "1.2.1",
   "description": "Haber Takip hizmetinin topladığı haberleri tek ekranda gösterir.",
+  "minimum_chrome_version": "116",
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
   "action": {
-    "default_title": "Haber Takip"
+    "default_title": "Haber Takip",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png"
+    }
   },
   "background": {
     "service_worker": "background.js"
@@ -14,5 +26,8 @@
   ],
   "host_permissions": [
     "http://127.0.0.1/*"
-  ]
+  ],
+  "content_security_policy": {
+    "extension_pages": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self'; connect-src http://127.0.0.1:*; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+  }
 }
