@@ -25,7 +25,9 @@ function newer(a, b) {
 }
 
 // GitHub'da yeni sürüm varsa uygulama sayfası indirme bağlantısını gösterir.
+// Mağazadan yüklenen eklentiyi tarayıcı kendisi güncellediği için (manifest'e update_url eklenir) denetim yapılmaz.
 async function checkUpdate() {
+  if (chrome.runtime.getManifest().update_url) return;
   try {
     const response = await fetch(RELEASES, {headers: {Accept: "application/vnd.github+json"}, credentials: "omit",
       signal: AbortSignal.timeout(20000)});

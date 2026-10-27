@@ -1,5 +1,10 @@
 # Haber Takip — Değişiklikler
 
+## 2.0.1
+- **Mağaza üzerinden otomatik güncelleme.** Yayın iş akışı yeni sürümü Chrome Web Mağazası'na ve Microsoft Edge Eklentileri'ne kendiliğinden yükleyip yayınlar (bir kerelik ayar: `magaza/KURULUM.md`). Mağazadan yüklenen eklentiyi tarayıcı kendiliğinden günceller.
+- Mağazaya hazır paket (`haber-takip-<sürüm>-magaza.zip`), başvuru metinleri, gizlilik politikası, ekran görüntüleri ve tanıtım görselleri eklendi.
+- Mağazadan yüklenen sürümde GitHub "yeni sürüm" bağlantısı gösterilmez.
+
 ## 2.0.0
 - **Kurulum gerektirmeyen eklenti.** Haberleri artık eklentinin kendisi çekiyor; yerel hizmet, Python, kurulum aracı ve bağlantı noktası kaldırıldı. Eklentiyi tarayıcıya yüklemek yeterli; her işletim sisteminde aynı şekilde çalışır.
 - Sayfa kapalıyken de arka planda 30 saniyede bir tarar; okunmamış haber sayısı araç çubuğu simgesinde görünür.

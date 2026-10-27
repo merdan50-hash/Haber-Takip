@@ -20,6 +20,7 @@ jobs:
         run: |
           for f in app.js background.js motor.js; do node --check "$f"; done
           node -e "JSON.parse(require('fs').readFileSync('manifest.json'))"
+          bash -n .github/magaza-yayinla.sh
       - name: Paketleme
         run: ./paketle.sh
       - name: Gerçek Chromium'da gerçek haber siteleriyle deneme

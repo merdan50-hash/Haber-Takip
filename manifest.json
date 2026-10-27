@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Haber Takip",
   "short_name": "Haber Takip",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "Haber sitelerini ve RSS akışlarını izler, yeni haberleri tek ekranda gösterir. Kurulum gerektirmez.",
   "minimum_chrome_version": "120",
   "icons": {
