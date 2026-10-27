@@ -1,0 +1,21 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Hizmet testleri
+        run: python3 -m unittest discover -s hizmet -v
+      - name: Sözdizimi denetimi
+        run: |
+          node --check app.js && node --check background.js
+          bash -n macos/kur.command && bash -n macos/kaldir.command
+          python3 -c "import json; json.load(open('manifest.json'))"
+      - name: Paketleme
+        run: ./paketle.sh

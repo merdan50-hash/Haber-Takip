@@ -1,5 +1,15 @@
 # Haber Takip — Değişiklikler
 
+## 1.3.0
+- **Yerel Haber Takip hizmeti eklendi** (`hizmet/haber_takip_hizmeti.py`). Yalnızca Python standart kütüphanesini kullanır, ek kurulum gerektirmez.
+  - Sitelerin RSS/Atom akışını kendisi bulur; akışı olmayan sitelerde ana sayfadaki haber başlıklarını izler.
+  - Erişilemeyen sitelerde bekleme süresini artırarak yeniden dener.
+  - Haberler ve kaynak listesi bilgisayarda saklanır, 30 günden eski okunmuş haberler temizlenir.
+  - Yalnızca 127.0.0.1 üzerinden ve erişim anahtarıyla çalışır.
+  - Eski eklenti kayıtları yalnızca ilk açılışta aktarılır; silinen kaynaklar geri gelmez.
+- **macOS kurulum aracı** (`kur.command`): hizmeti kurar, oturum açılışında otomatik başlatır, erişim anahtarını üretip eklentiye yazar. Güncelleme için yeniden çalıştırılabilir. Kaldırmak için `kaldir.command`.
+- Release artık iki paket içerir: yalnızca eklenti ve macOS için eksiksiz paket.
+
 ## 1.2.1
 - Uygulama sekmesi artık `chrome.runtime.getContexts` ile bulunuyor. Eski kod `chrome.tabs.query({url})` kullanıyordu; bu çağrı `tabs` izni olmadan URL ile eşleşmediği için simgeye her tıklamada yeni sekme açılıyordu.
 - Chrome Web Mağazası için gereken simgeler (16/32/48/128 px) eklendi.
@@ -9,6 +19,3 @@
 - "Kaynak eklendi" gibi işlem bildirimleri 6 saniye sonra kendiliğinden kayboluyor; bağlantı hataları sorun sürdükçe görünür kalıyor.
 - Sürüm numarası artık tek bir yerden (`manifest.json`) okunuyor.
 - En düşük Chrome sürümü: 116.
-
-## Kurulum notu
-`bridge-config.js` içindeki `token` boş gelir; yerel Haber Takip hizmetinin kurulum aracı bu dosyaya adres ve anahtarı yazar. Anahtar dosyada yoksa uygulama "bağlantı ayarlanmamış" uyarısı gösterir.

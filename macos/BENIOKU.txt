@@ -1,0 +1,25 @@
+HABER TAKİP — macOS KURULUMU
+============================
+
+1) Bu klasörü olduğu gibi bırakın (İndirilenler klasöründe kalabilir).
+
+2) Terminal'i açın (Spotlight: Cmd+Boşluk, "Terminal" yazın) ve şunu yapıştırıp Enter'a basın:
+
+     bash ~/Downloads/HaberTakip/kur.command
+
+   Klasör başka bir yerdeyse "bash " yazıp kur.command dosyasını Terminal penceresine
+   sürükleyin, sonra Enter'a basın.
+
+   (kur.command'a çift tıklamak da işe yarar; ama macOS "doğrulanamadı" uyarısı verirse
+   Sistem Ayarları > Gizlilik ve Güvenlik > "Yine de Aç" demeniz gerekir. Terminal yolu
+   bu uyarıyı hiç göstermez.)
+
+3) Kurulum bitince ekrandaki 4 adımla eklentiyi Chrome'a ekleyin.
+
+Güncelleme: yeni sürümün klasöründe aynı komutu çalıştırın; kayıtlarınız korunur.
+Kaldırma:   bash ~/Downloads/HaberTakip/kaldir.command
+
+Nerede ne var?
+  Eklenti klasörü : ~/HaberTakip/eklenti
+  Hizmet ve kayıt : ~/Library/Application Support/HaberTakip
+  Günlük dosyası  : ~/Library/Logs/HaberTakip/hizmet.log

@@ -1,6 +1,6 @@
 name: Release
 
-# Eklenti zip'ini oluşturup GitHub Release olarak yayınlar.
+# Testleri çalıştırır, eklenti ve macOS paketlerini oluşturup GitHub Release olarak yayınlar.
 # İki yolla çalışır: "v1.2.1" gibi bir etiket göndermek ya da Actions sekmesinden "Run workflow".
 # Elle çalıştırıldığında etiketi manifest.json'daki sürümden kendisi oluşturur.
 on:
@@ -28,10 +28,14 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "tag=v$version" >> "$GITHUB_OUTPUT"
 
-      - name: Eklenti paketini oluştur
+      - name: Testler
         run: |
-          zip -qr -X "haber-takip-${{ steps.version.outputs.version }}.zip" \
-            manifest.json background.js app.html app.js bridge-config.js icons
+          python3 -m unittest discover -s hizmet -v
+          node --check app.js && node --check background.js
+          bash -n macos/kur.command && bash -n macos/kaldir.command
+
+      - name: Paketleri oluştur
+        run: ./paketle.sh
 
       - name: Sürüm notlarını CHANGELOG'dan al
         run: |
@@ -49,5 +53,5 @@ jobs:
             echo "::error::$TAG sürümü zaten yayınlanmış. Yeni sürüm için manifest.json'daki sürümü artırın."
             exit 1
           fi
-          gh release create "$TAG" "haber-takip-$VERSION.zip" --target "$GITHUB_SHA" \
+          gh release create "$TAG" "dist/haber-takip-mac-$VERSION.zip" "dist/haber-takip-$VERSION.zip" --target "$GITHUB_SHA" \
             --title "Haber Takip $VERSION" --notes-file notes.md
