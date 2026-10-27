@@ -1,5 +1,9 @@
 # Haber Takip — Değişiklikler
 
+## 1.4.1
+- **Kurulum, 18765 numaralı bağlantı noktası başka bir programdayken artık yarıda kesilmiyor.** O programın adını gösterip 18766–18799 arasında boş bir bağlantı noktası seçiyor ve eklentiye o adresi yazıyor. Seçilen numara sonraki kurulumlarda da korunuyor.
+- Eklenti, kurulum aracının hazırladığı klasörden yüklenmediğinde hangi klasörün yükleneceğini açıkça söylüyor; başlıkta "Kurulum tamamlanmamış" yazıyor.
+
 ## 1.4.0
 - **Windows, macOS ve Linux desteği.** Tek kurulum paketi üç işletim sistemi için de araç içerir:
   - Windows 10/11: `kur-windows.bat` (çift tıklama). Python yoksa winget ile yükler. Hizmet, Görev Zamanlayıcı ile oturum açılışında arka planda başlar.

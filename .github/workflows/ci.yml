@@ -37,6 +37,7 @@ jobs:
       HABER_TAKIP_SESSIZ: "1"
       HABER_TAKIP_SIL: "e"
       PYTHONIOENCODING: utf-8
+      BEKLENEN_PORT: "18766"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -48,6 +49,12 @@ jobs:
           PY=$(command -v python3 || command -v python)
           "$PY" -c "import zipfile,glob,os; zipfile.ZipFile(glob.glob('haber-takip-kurulum-*.zip')[0]).extractall(os.path.join(os.path.expanduser('~'), 'Downloads'))"
           chmod +x ~/Downloads/HaberTakip/*.sh ~/Downloads/HaberTakip/*.command
+      - name: 18765'i başka bir programla doldur (kurulum boş bağlantı noktasına geçmeli)
+        shell: bash
+        run: |
+          PY=$(command -v python3 || command -v python)
+          nohup "$PY" -c "import socket,time; s=socket.socket(); s.bind(('127.0.0.1',18765)); s.listen(); time.sleep(3600)" >/dev/null 2>&1 &
+          sleep 2
 
       - name: Kur ve dene (Linux)
         if: runner.os == 'Linux'
@@ -91,7 +98,7 @@ jobs:
           esac
           sleep 3
           PY=$(command -v python3 || command -v python)
-          if "$PY" -c "import socket,sys; sys.exit(socket.socket().connect_ex(('127.0.0.1',18765))!=0)"; then
+          if "$PY" -c "import socket,sys; sys.exit(socket.socket().connect_ex(('127.0.0.1',int(open('port.txt').read())))!=0)"; then
             echo "Hizmet kaldırıldıktan sonra hâlâ çalışıyor"; exit 1
           fi
           echo "Hizmet kapalı."

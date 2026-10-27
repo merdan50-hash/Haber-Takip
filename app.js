@@ -14,7 +14,7 @@ const LOOPBACK = new Set(["127.0.0.1"]);
 let sound = false, audio, status = null, articles = [], total = 0, sel = null, query = "", unreadOnly = false;
 let visibleLimit = PAGE_SIZE, generation = 0, articleGeneration = -1, articleRevision = null;
 let refreshing = false, refreshAgain = false, imported = false, importData, connected = false, configBusy = false, ready = false;
-let previousUnread = null, unseen = 0, messageKind = "", lastChips = "", messageTimer, searchTimer, reloading = false;
+let setupMissing = false, previousUnread = null, unseen = 0, messageKind = "", lastChips = "", messageTimer, searchTimer, reloading = false;
 const pendingRead = new Set();
 
 function notify(message, kind = "action") {
@@ -32,14 +32,23 @@ function safeURL(value) {
     return url.href;
   } catch { return null; }
 }
+function setupError(message) {
+  const error = new Error(message);
+  error.setup = true;
+  return error;
+}
 function bridge() {
   const config = globalThis.HABER_BRIDGE;
   if (!config || !safeURL(config.url) || typeof config.token !== "string" || !config.token.trim()) {
-    throw new Error("Haber Takip hizmet bağlantısı ayarlanmamış. Kurulum aracını çalıştırın.");
+    // Kurulum aracı anahtarı yalnızca kendi hazırladığı eklenti klasörüne yazar.
+    const folder = /Windows/i.test(navigator.userAgent) ? "%USERPROFILE%\\HaberTakip\\eklenti" : "~/HaberTakip/eklenti";
+    throw setupError("Bu eklenti, kurulum aracının hazırladığı klasörden yüklenmemiş. Önce kurulum aracını çalıştırın; " +
+      `ardından ${navigator.userAgent.includes("Edg/") ? "edge" : "chrome"}://extensions sayfasında bu Haber Takip kartını kaldırıp ` +
+      `"Paketlenmemiş öğe yükle" ile şu klasörü seçin: ${folder}`);
   }
   // Erişim anahtarı yalnızca bu bilgisayardaki hizmete gönderilir.
   if (!LOOPBACK.has(new URL(config.url).hostname)) {
-    throw new Error("Haber Takip hizmet adresi bu bilgisayarı (127.0.0.1) göstermiyor. Kurulum aracını yeniden çalıştırın.");
+    throw setupError("Haber Takip hizmet adresi bu bilgisayarı (127.0.0.1) göstermiyor. Kurulum aracını yeniden çalıştırın.");
   }
   return config;
 }
@@ -84,7 +93,7 @@ function sourceStatus(source) {
 function chips() {
   const sources = Array.isArray(status?.sources) ? status.sources : [];
   const healthy = sources.filter(source => source.lastSuccess && !source.error && !source.partialError).length;
-  $("#st").textContent = connected ? `${healthy}/${sources.length} kaynak erişilebilir` : "Hizmete bağlanılamıyor";
+  $("#st").textContent = connected ? `${healthy}/${sources.length} kaynak erişilebilir` : setupMissing ? "Kurulum tamamlanmamış" : "Hizmete bağlanılamıyor";
   $("#live").classList.toggle("off", !connected || healthy === 0);
   const html = sources.map(source => {
     const name = host(source.url), selected = sel === name;
@@ -173,7 +182,7 @@ function updateText(update) {
 }
 function acceptStatus(value) {
   if (!value || !Array.isArray(value.sites) || !Array.isArray(value.sources) || value.revision === undefined) throw new Error("Haber hizmetinin durum yanıtı eksik.");
-  status = value; connected = true;
+  status = value; connected = true; setupMissing = false;
   reloadIfUpdated(value);
   $("#ver").title = updateText(value.update);
   if (!configBusy && POLLS.includes(value.poll)) $("#iv").value = value.poll;
@@ -220,7 +229,7 @@ async function refresh() {
       render();
     }
   } catch (error) {
-    connected = false; chips();
+    connected = false; setupMissing = !!error.setup; chips();
     notify(error.message || "Haber Takip hizmetine bağlanılamıyor.", "connection");
     if (!articles.length) render();
   } finally {

@@ -14,10 +14,16 @@ token = open(os.path.join(data_dir, "token"), encoding="utf-8-sig").read().strip
 config = open(os.path.join(extension_dir, "bridge-config.js"), encoding="utf-8").read()
 assert token in config, "eklentiye yazılan anahtar hizmetinkiyle aynı olmalı"
 assert os.path.exists(os.path.join(extension_dir, "manifest.json")), "eklenti dosyaları kopyalanmamış"
+base = json.loads(re.search(r"HABER_BRIDGE = (\{.*\});", config).group(1))["url"]
+expected = os.environ.get("BEKLENEN_PORT")
+assert not expected or base.endswith(":" + expected), "beklenen bağlantı noktası %s, kurulan %s" % (expected, base)
+with open("port.txt", "w") as stream:  # kaldırma adımı bu bağlantı noktasının kapandığını denetler
+    stream.write(base.rsplit(":", 1)[1])
+print("Hizmet adresi:", base)
 
 
 def call(path, method="GET", body=None):
-    request = urllib.request.Request("http://127.0.0.1:18765" + path, method=method,
+    request = urllib.request.Request(base + path, method=method,
                                      data=None if body is None else json.dumps(body).encode("utf-8"),
                                      headers={"Authorization": "Bearer " + token, "Content-Type": "application/json"})
     with urllib.request.urlopen(request, timeout=10) as response:

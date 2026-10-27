@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Haber Takip (Güncel)",
   "short_name": "Haber Takip",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "description": "Haber Takip hizmetinin topladığı haberleri tek ekranda gösterir.",
   "minimum_chrome_version": "116",
   "icons": {

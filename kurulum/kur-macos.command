@@ -5,7 +5,7 @@
 set -euo pipefail
 
 LABEL="com.habertakip.hizmet"
-PORT=18765
+VARSAYILAN_PORT=18765
 PAKET="$(cd "$(dirname "$0")" && pwd)"
 HIZMET_DIR="$HOME/Library/Application Support/HaberTakip"
 EKLENTI_DIR="$HOME/HaberTakip/eklenti"
@@ -29,16 +29,27 @@ PY="$("$PY" -c 'import sys; print(sys.executable)')"
 
 adim "Eski hizmet durduruluyor (varsa)"
 launchctl bootout "gui/$(id -u)/$LABEL" >/dev/null 2>&1 || true
-for _ in 1 2 3 4 5 6 7 8 9 10; do
-  lsof -nP -iTCP:"$PORT" -sTCP:LISTEN >/dev/null 2>&1 || break
-  sleep 0.5
+pkill -f "haber_takip_hizmeti.py --data $HIZMET_DIR" >/dev/null 2>&1 || true
+dolu() { lsof -nP -iTCP:"$1" -sTCP:LISTEN >/dev/null 2>&1; }
+TERCIH="$(cat "$HIZMET_DIR/port" 2>/dev/null || echo "$VARSAYILAN_PORT")"
+for _ in 1 2 3 4 5 6 7 8 9 10; do dolu "$TERCIH" || break; sleep 0.5; done
+
+# Bağlantı noktası başka bir programdaysa onu bozmadan boş bir bağlantı noktasına geç.
+PORT=""
+for ADAY in "$TERCIH" $(seq "$VARSAYILAN_PORT" 18799 | grep -vx "$TERCIH"); do
+  if dolu "$ADAY"; then
+    PID="$(lsof -nP -t -iTCP:"$ADAY" -sTCP:LISTEN 2>/dev/null | head -1)"
+    printf '  %s numaralı bağlantı noktası dolu (%s); başka bir numara deneniyor.\n' "$ADAY" \
+      "$(ps -o command= -p "$PID" 2>/dev/null | cut -c1-120)"
+  else
+    PORT="$ADAY"; break
+  fi
 done
-if lsof -nP -iTCP:"$PORT" -sTCP:LISTEN >/dev/null 2>&1; then
-  hata "$PORT numaralı bağlantı noktasını başka bir program kullanıyor: $(lsof -nP -iTCP:"$PORT" -sTCP:LISTEN | awk 'NR==2{print $1}')"
-fi
+[ -n "$PORT" ] || hata "18765–18799 arasında boş bağlantı noktası bulunamadı."
 
 adim "Hizmet kuruluyor: $HIZMET_DIR"
 mkdir -p "$HIZMET_DIR" "$LOG_DIR" "$HOME/Library/LaunchAgents"
+echo "$PORT" > "$HIZMET_DIR/port"
 cp "$PAKET/hizmet/haber_takip_hizmeti.py" "$HIZMET_DIR/"
 if [ ! -s "$HIZMET_DIR/token" ]; then
   (umask 077; "$PY" -c 'import secrets; print(secrets.token_urlsafe(32))' > "$HIZMET_DIR/token")
@@ -88,7 +99,7 @@ for _ in $(seq 1 40); do
 done
 [ "${HAZIR:-}" = 1 ] || hata "Hizmet yanıt vermedi. Ayrıntı: $LOG_DIR/hizmet.log"
 
-printf '\n\033[32mHizmet çalışıyor.\033[0m Bilgisayar her açıldığında kendiliğinden başlar.\n\n'
+printf '\n\033[32mHizmet çalışıyor\033[0m (http://127.0.0.1:%s). Bilgisayar her açıldığında kendiliğinden başlar.\n\n' "$PORT"
 cat <<MSG
 Son adım — eklentiyi Chrome'a ekleyin (yalnızca ilk kurulumda gerekir):
   1. Chrome'da adres çubuğuna  chrome://extensions  yazın.

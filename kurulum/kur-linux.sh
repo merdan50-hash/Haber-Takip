@@ -5,7 +5,7 @@
 # Sonraki sürümler GitHub'dan kendiliğinden kurulur.
 set -euo pipefail
 
-PORT=18765
+VARSAYILAN_PORT=18765
 PAKET="$(cd "$(dirname "$0")" && pwd)"
 HIZMET_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/haber-takip"
 EKLENTI_DIR="$HOME/HaberTakip/eklenti"
@@ -27,8 +27,8 @@ if [ -z "$PY" ] || ! "$PY" -c 'import sys; sys.exit(0 if sys.version_info >= (3,
 fi
 
 systemd_var() { command -v systemctl >/dev/null 2>&1 && systemctl --user show-environment >/dev/null 2>&1; }
-dinliyor() {
-  "$PY" - "$PORT" <<'PYEOF'
+dolu() {
+  "$PY" - "$1" <<'PYEOF'
 import socket, sys
 s = socket.socket()
 s.settimeout(1)
@@ -39,11 +39,24 @@ PYEOF
 adim "Eski hizmet durduruluyor (varsa)"
 if systemd_var; then systemctl --user stop haber-takip.service >/dev/null 2>&1 || true; fi
 pkill -f "haber_takip_hizmeti.py --data $HIZMET_DIR" >/dev/null 2>&1 || true
-for _ in $(seq 1 10); do dinliyor || break; sleep 0.5; done
-dinliyor && hata "$PORT numaralı bağlantı noktasını başka bir program kullanıyor."
+TERCIH="$(cat "$HIZMET_DIR/port" 2>/dev/null || echo "$VARSAYILAN_PORT")"
+for _ in $(seq 1 10); do dolu "$TERCIH" || break; sleep 0.5; done
+
+# Bağlantı noktası başka bir programdaysa onu bozmadan boş bir bağlantı noktasına geç.
+PORT=""
+for ADAY in "$TERCIH" $(seq "$VARSAYILAN_PORT" 18799 | grep -vx "$TERCIH"); do
+  if dolu "$ADAY"; then
+    SAHIP="$( (command -v ss >/dev/null && ss -ltnpH "sport = :$ADAY" 2>/dev/null | grep -o 'users:(("[^"]*"' | cut -d'"' -f2) || true)"
+    printf '  %s numaralı bağlantı noktası dolu%s; başka bir numara deneniyor.\n' "$ADAY" "${SAHIP:+ ($SAHIP)}"
+  else
+    PORT="$ADAY"; break
+  fi
+done
+[ -n "$PORT" ] || hata "18765–18799 arasında boş bağlantı noktası bulunamadı."
 
 adim "Hizmet kuruluyor: $HIZMET_DIR"
 mkdir -p "$HIZMET_DIR"
+echo "$PORT" > "$HIZMET_DIR/port"
 cp "$PAKET/hizmet/haber_takip_hizmeti.py" "$HIZMET_DIR/"
 if [ ! -s "$HIZMET_DIR/token" ]; then
   (umask 077; "$PY" -c 'import secrets; print(secrets.token_urlsafe(32))' > "$HIZMET_DIR/token")
@@ -110,7 +123,7 @@ PYEOF
 done
 [ "${HAZIR:-}" = 1 ] || hata "Hizmet yanıt vermedi. Ayrıntı: $LOG"
 
-printf '\n\033[32mHizmet çalışıyor.\033[0m Otomatik başlatma: %s\n\n' "$BASLATMA"
+printf '\n\033[32mHizmet çalışıyor\033[0m (http://127.0.0.1:%s). Otomatik başlatma: %s\n\n' "$PORT" "$BASLATMA"
 cat <<MSG
 Son adım — eklentiyi tarayıcıya ekleyin (yalnızca ilk kurulumda gerekir).
 Chrome, Chromium, Edge, Brave, Opera ve Vivaldi desteklenir:

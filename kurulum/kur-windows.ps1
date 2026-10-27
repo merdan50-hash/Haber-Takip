@@ -6,7 +6,7 @@ param([switch]$Sessiz)
 $ErrorActionPreference = "Stop"
 try { [Console]::OutputEncoding = [Text.Encoding]::UTF8 } catch { }
 
-$Port = 18765
+$VarsayilanPort = 18765
 $Paket = Split-Path -Parent $MyInvocation.MyCommand.Path
 $HizmetDir = Join-Path $env:LOCALAPPDATA "HaberTakip"
 $EklentiDir = Join-Path $env:USERPROFILE "HaberTakip\eklenti"
@@ -58,12 +58,26 @@ Stop-ScheduledTask -TaskName $Gorev -ErrorAction SilentlyContinue
 Get-CimInstance Win32_Process -Filter "Name LIKE 'python%'" -ErrorAction SilentlyContinue |
   Where-Object { $_.CommandLine -like "*haber_takip_hizmeti.py*" } |
   ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
-function Dinliyor { [bool](Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue) }
-for ($i = 0; $i -lt 10 -and (Dinliyor); $i++) { Start-Sleep -Milliseconds 500 }
-if (Dinliyor) { Hata "$Port numaralı bağlantı noktasını başka bir program kullanıyor." }
+function Dolu([int]$No) { [bool](Get-NetTCPConnection -LocalPort $No -State Listen -ErrorAction SilentlyContinue) }
+$PortDosyasi = Join-Path $HizmetDir "port"
+$Tercih = $VarsayilanPort
+if (Test-Path $PortDosyasi) { $Tercih = [int]((Get-Content $PortDosyasi -Raw).Trim()) }
+for ($i = 0; $i -lt 10 -and (Dolu $Tercih); $i++) { Start-Sleep -Milliseconds 500 }
+
+# Bağlantı noktası başka bir programdaysa onu bozmadan boş bir bağlantı noktasına geç.
+$Port = $null
+foreach ($Aday in @($Tercih) + (($VarsayilanPort..18799) | Where-Object { $_ -ne $Tercih })) {
+  if (Dolu $Aday) {
+    $Sahip = Get-NetTCPConnection -LocalPort $Aday -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1 |
+      ForEach-Object { (Get-Process -Id $_.OwningProcess -ErrorAction SilentlyContinue).Path }
+    Write-Host "  $Aday numaralı bağlantı noktası dolu ($Sahip); başka bir numara deneniyor."
+  } else { $Port = $Aday; break }
+}
+if (-not $Port) { Hata "18765–18799 arasında boş bağlantı noktası bulunamadı." }
 
 Adim "Hizmet kuruluyor: $HizmetDir"
 New-Item -ItemType Directory -Force -Path $HizmetDir | Out-Null
+[IO.File]::WriteAllText($PortDosyasi, "$Port", $Utf8)
 Copy-Item (Join-Path $Paket "hizmet\haber_takip_hizmeti.py") $HizmetDir -Force
 $TokenDosyasi = Join-Path $HizmetDir "token"
 if (-not (Test-Path $TokenDosyasi) -or -not (Get-Content $TokenDosyasi -Raw).Trim()) {
@@ -119,7 +133,7 @@ for ($i = 0; $i -lt 40; $i++) {
 if (-not $Hazir) { Hata "Hizmet yanıt vermedi. Ayrıntı: $Log" }
 
 Write-Host ""
-Write-Host "Hizmet çalışıyor. Otomatik başlatma: $Baslatma" -ForegroundColor Green
+Write-Host "Hizmet çalışıyor (http://127.0.0.1:$Port). Otomatik başlatma: $Baslatma" -ForegroundColor Green
 Write-Host @"
 
 Son adım — eklentiyi tarayıcıya ekleyin (yalnızca ilk kurulumda gerekir).
