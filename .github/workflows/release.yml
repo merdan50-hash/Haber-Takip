@@ -1,0 +1,43 @@
+name: Release
+
+# "v1.2.1" gibi bir etiket gönderildiğinde eklenti zip'ini oluşturup GitHub Release olarak yayınlar.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Etiket ile manifest sürümünü karşılaştır
+        id: version
+        run: |
+          version=$(jq -r .version manifest.json)
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::Etiket ($GITHUB_REF_NAME) manifest sürümüyle (v$version) eşleşmiyor."
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Eklenti paketini oluştur
+        run: |
+          zip -qr -X "haber-takip-${{ steps.version.outputs.version }}.zip" \
+            manifest.json background.js app.html app.js bridge-config.js icons
+
+      - name: Sürüm notlarını CHANGELOG'dan al
+        run: |
+          awk -v v="## ${{ steps.version.outputs.version }}" \
+            '$0 == v {on=1; next} /^## / {on=0} on' CHANGELOG.md > notes.md
+          [ -s notes.md ] || echo "Sürüm ${{ steps.version.outputs.version }}" > notes.md
+
+      - name: Release yayınla
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" "haber-takip-${{ steps.version.outputs.version }}.zip" \
+            --title "Haber Takip ${{ steps.version.outputs.version }}" --notes-file notes.md
