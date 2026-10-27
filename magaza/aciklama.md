@@ -28,7 +28,7 @@ Gizlilik: Hesap, kayıt veya sunucu yoktur. Kaynak listeniz ve haberler yalnızc
 Açık kaynak: https://github.com/merdan50-hash/Haber-Takip
 
 ## Görseller (bu klasörde)
-- Simge: ../icons/icon128.png (128×128)
+- Simge: ../icons/icon128.png (128×128); Edge mağaza logosu: logo-300x300.png (300×300)
 - Ekran görüntüleri (1280×800): ekran-1-acik.png, ekran-2-koyu.png
 - Küçük tanıtım kutusu (440×280): tanitim-440x280.png
 - Büyük tanıtım görseli (1400×560): tanitim-1400x560.png

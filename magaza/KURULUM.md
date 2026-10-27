@@ -31,7 +31,7 @@ Paket: GitHub Releases sayfasındaki `haber-takip-<sürüm>-magaza.zip` dosyası
 
 ---
 
-## B. Microsoft Edge Eklentileri (ücretsiz)
+## B. Microsoft Edge Eklentileri (ücretsiz) — adım adım form değerleri: [edge.md](edge.md)
 
 1. https://partner.microsoft.com/dashboard/microsoftedge/overview adresinde ücretsiz geliştirici kaydı yapın.
 2. **Yeni uzantı oluştur** → `haber-takip-<sürüm>-magaza.zip` dosyasını yükleyin, [aciklama.md](aciklama.md)'deki metinlerle formu doldurup yayınlayın.
