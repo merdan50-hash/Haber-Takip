@@ -1,5 +1,7 @@
 """Haber Takip hizmeti testleri: python3 -m unittest discover -s hizmet"""
+import hashlib
 import http.server
+import io
 import json
 import os
 import shutil
@@ -9,6 +11,7 @@ import time
 import unittest
 import urllib.error
 import urllib.request
+import zipfile
 
 import haber_takip_hizmeti as h
 
@@ -105,8 +108,9 @@ class ApiTests(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         h.ALLOW_PRIVATE_HOSTS = False
-        cls.api.shutdown()
-        cls.fixtures.shutdown()
+        for server in (cls.api, cls.fixtures):
+            server.shutdown()
+            server.server_close()
         shutil.rmtree(cls.data, ignore_errors=True)
 
     def call(self, path, method="GET", body=None, token=None, host=None):
@@ -174,6 +178,118 @@ class ApiTests(unittest.TestCase):
         h.Scanner(store).scan(dict(store.data["sites"][0]))
         self.assertIsNone(store.runtime[self.site + "duz/"]["error"])
         self.assertEqual([a["title"] for a in store.data["articles"].values()], ["Uzun bir haber başlığı burada yer alıyor"])
+
+
+def package(version, extra=None, service=None):
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        archive.writestr("HaberTakip/eklenti/manifest.json", json.dumps({"version": version}))
+        archive.writestr("HaberTakip/eklenti/app.js", "// yeni")
+        archive.writestr("HaberTakip/eklenti/icons/icon16.png", b"png")
+        archive.writestr("HaberTakip/eklenti/bridge-config.js", "// paketteki boş ayar")
+        archive.writestr("HaberTakip/hizmet/haber_takip_hizmeti.py", service or "VERSION = %r\n" % version)
+        archive.writestr("HaberTakip/kur-macos.command", "#!/bin/bash")
+        for name, data in (extra or {}).items():
+            archive.writestr(name, data)
+    return buffer.getvalue()
+
+
+class FakeGitHub(http.server.BaseHTTPRequestHandler):
+    release = {}
+    files = {}
+
+    def do_GET(self):
+        if self.path == "/repos/sahip/depo/releases/latest":
+            body, kind = json.dumps(self.release).encode("utf-8"), "application/json"
+        elif self.path in self.files:
+            body, kind = self.files[self.path], "application/zip"
+        else:
+            self.send_response(404)
+            self.end_headers()
+            return
+        self.send_response(200)
+        self.send_header("Content-Type", kind)
+        self.end_headers()
+        self.wfile.write(body)
+
+    def log_message(self, *args):
+        pass
+
+
+class UpdaterTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.github = http.server.ThreadingHTTPServer(("127.0.0.1", 0), FakeGitHub)
+        threading.Thread(target=cls.github.serve_forever, daemon=True).start()
+        cls.base = "http://127.0.0.1:%d" % cls.github.server_port
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.github.shutdown()
+        cls.github.server_close()
+
+    def setUp(self):
+        self.root = tempfile.mkdtemp()
+        self.extension = os.path.join(self.root, "eklenti")
+        os.makedirs(self.extension)
+        with open(os.path.join(self.extension, "manifest.json"), "w") as stream:
+            json.dump({"version": h.VERSION}, stream)
+        with open(os.path.join(self.extension, "bridge-config.js"), "w") as stream:
+            stream.write("// anahtar")
+        self.updater = h.Updater(h.Store(os.path.join(self.root, "durum.json")), self.extension, self.root,
+                                 repo="sahip/depo", api=self.base)
+        self.updater.service_path = os.path.join(self.root, "haber_takip_hizmeti.py")
+
+    def tearDown(self):
+        shutil.rmtree(self.root, ignore_errors=True)
+
+    def publish(self, version, data, digest=None):
+        name = "haber-takip-kurulum-%s.zip" % version
+        FakeGitHub.files = {"/indir/" + name: data}
+        FakeGitHub.release = {"tag_name": "v" + version, "assets": [{
+            "name": name, "url": self.base + "/api/asset", "browser_download_url": self.base + "/indir/" + name,
+            "digest": digest or "sha256:" + hashlib.sha256(data).hexdigest()}]}
+
+    def read(self, *parts):
+        with open(os.path.join(self.extension, *parts)) as stream:
+            return stream.read()
+
+    def test_installs_newer_release(self):
+        self.publish("99.0.0", package("99.0.0"))
+        self.assertTrue(self.updater.check())
+        self.assertEqual(self.updater.extension_version, "99.0.0")
+        self.assertEqual(self.read("app.js"), "// yeni")
+        self.assertEqual(self.read("bridge-config.js"), "// anahtar", "erişim anahtarı korunmalı")
+        self.assertTrue(os.path.exists(os.path.join(self.extension, "icons", "icon16.png")))
+        with open(self.updater.service_path) as stream:
+            self.assertIn("99.0.0", stream.read())
+
+    def test_same_version_is_up_to_date(self):
+        self.publish(h.VERSION, package(h.VERSION))
+        self.assertFalse(self.updater.check())
+        self.assertEqual(self.updater.state["state"], "güncel")
+
+    def test_rejects_bad_digest(self):
+        self.publish("99.0.0", package("99.0.0"), digest="sha256:" + "0" * 64)
+        self.assertFalse(self.updater.check())
+        self.assertIn("SHA-256", self.updater.state["error"])
+        self.assertEqual(self.read("bridge-config.js"), "// anahtar")
+        self.assertFalse(os.path.exists(os.path.join(self.extension, "app.js")))
+
+    def test_rejects_path_traversal(self):
+        self.publish("99.0.0", package("99.0.0", {"HaberTakip/eklenti/../../kotu.txt": "x"}))
+        self.assertFalse(self.updater.check())
+        self.assertFalse(os.path.exists(os.path.join(self.root, "kotu.txt")))
+        self.assertFalse(os.path.exists(self.updater.service_path))
+
+    def test_rejects_broken_service(self):
+        self.publish("99.0.0", package("99.0.0", service="def bozuk(:\n"))
+        self.assertFalse(self.updater.check())
+        self.assertFalse(os.path.exists(self.updater.service_path))
+
+    def test_version_compare(self):
+        self.assertGreater(h.version_tuple("1.10.0"), h.version_tuple("1.9.9"))
+        self.assertEqual(h.version_tuple("v1.4.0"), (1, 4, 0))
 
 
 if __name__ == "__main__":

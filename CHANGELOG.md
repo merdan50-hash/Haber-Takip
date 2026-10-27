@@ -1,5 +1,14 @@
 # Haber Takip — Değişiklikler
 
+## 1.4.0
+- **Windows, macOS ve Linux desteği.** Tek kurulum paketi üç işletim sistemi için de araç içerir:
+  - Windows 10/11: `kur-windows.bat` (çift tıklama). Python yoksa winget ile yükler. Hizmet, Görev Zamanlayıcı ile oturum açılışında arka planda başlar.
+  - macOS: `kur-macos.command` (launchd ile otomatik başlatma).
+  - Linux: `kur-linux.sh` (systemd kullanıcı hizmeti; yoksa masaüstü otomatik başlatma).
+- **GitHub'dan otomatik güncelleme.** Hizmet 15 dakikada bir son Release'i denetler. Yeni sürümü indirir, SHA-256 özetini doğrular, kendini ve eklenti dosyalarını günceller ve yeniden başlar. Eklenti yeni sürümü görünce kendini yeniden yükler ve sekmesini geri açar.
+- Hizmet Windows'ta konsol penceresi açmadan çalışır ve günlüğünü `hizmet.log` dosyasına yazar.
+- Kurulum her sürümde GitHub Actions üzerinde gerçek Windows, macOS ve Linux makinelerinde kurulup gerçek haber siteleriyle denenir.
+
 ## 1.3.0
 - **Yerel Haber Takip hizmeti eklendi** (`hizmet/haber_takip_hizmeti.py`). Yalnızca Python standart kütüphanesini kullanır, ek kurulum gerektirmez.
   - Sitelerin RSS/Atom akışını kendisi bulur; akışı olmayan sitelerde ana sayfadaki haber başlıklarını izler.

@@ -9,7 +9,8 @@ launchctl bootout "gui/$(id -u)/$LABEL" >/dev/null 2>&1 || true
 rm -f "$HOME/Library/LaunchAgents/$LABEL.plist"
 echo "Hizmet durduruldu ve otomatik başlatma kaldırıldı."
 
-read -r -p "Kaynak listesi ve haber kayıtları da silinsin mi? [e/H] " CEVAP
+CEVAP="${HABER_TAKIP_SIL:-}"
+[ -n "$CEVAP" ] || read -r -p "Kaynak listesi ve haber kayıtları da silinsin mi? [e/H] " CEVAP
 case "$CEVAP" in
   [eE]*) rm -rf "$HIZMET_DIR" "$HOME/Library/Logs/HaberTakip" "$HOME/HaberTakip"
          echo "Kayıtlar ve eklenti klasörü silindi." ;;

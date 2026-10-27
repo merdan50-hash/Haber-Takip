@@ -24,14 +24,15 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
+import zipfile
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from html.parser import HTMLParser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-VERSION = "1.3.0"
+VERSION = "1.4.0"
 POLLS = (5, 10, 15, 30, 60, 120, 300)
-USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) HaberTakip/" + VERSION
+USER_AGENT = "Mozilla/5.0 (compatible; HaberTakip/%s; +https://github.com/merdan50-hash/Haber-Takip)" % VERSION
 MAX_DOWNLOAD = 8 * 1024 * 1024
 MAX_BODY = 16 * 1024 * 1024
 MAX_ARTICLES = 20000
@@ -44,7 +45,8 @@ ALLOW_PRIVATE_HOSTS = False  # yalnızca testler için
 
 
 def log(*parts):
-    print(time.strftime("%Y-%m-%d %H:%M:%S"), *parts, file=sys.stderr, flush=True)
+    if sys.stderr:  # Windows'ta pythonw ile çalışırken --log verilmezse çıktı yoktur
+        print(time.strftime("%Y-%m-%d %H:%M:%S"), *parts, file=sys.stderr, flush=True)
 
 
 def host_of(url):
@@ -108,26 +110,56 @@ CURL_ERRORS = {
 }
 
 
-def fetch(url, timeout=20):
-    """(gövde, son adres, içerik türü) döndürür. macOS'ta sistem sertifikalarını kullanan curl tercih edilir."""
-    curl = shutil.which("curl")
+_CURL = None
+
+
+def curl_command():
+    """Kullanılabilir curl komutunu ve desteklenen seçenekleri bir kez belirler.
+
+    curl macOS, Windows 10+ ve çoğu Linux'ta hazır gelir ve işletim sisteminin sertifika deposunu kullanır.
+    Bulunamazsa urllib'e geri dönülür.
+    """
+    global _CURL
+    if _CURL is None:
+        _CURL = []
+        path = shutil.which("curl")
+        if path:
+            try:
+                features = subprocess.run([path, "-V"], capture_output=True, timeout=10, **NO_WINDOW).stdout
+                _CURL = [path] + (["--compressed"] if b"libz" in features else [])
+            except (OSError, subprocess.SubprocessError):
+                pass
+    return _CURL
+
+
+# Windows'ta arka plandaki hizmet her curl çağrısında konsol penceresi açmasın.
+NO_WINDOW = {"creationflags": getattr(subprocess, "CREATE_NO_WINDOW", 0)} if os.name == "nt" else {}
+
+
+FEED_ACCEPT = "application/rss+xml, application/atom+xml, application/xml, text/xml, text/html;q=0.9, */*;q=0.5"
+
+
+def fetch(url, timeout=20, headers=None, limit=MAX_DOWNLOAD):
+    """(gövde, son adres, içerik türü) döndürür."""
+    headers = dict({"Accept": FEED_ACCEPT}, **(headers or {}))
+    curl = curl_command()
     if curl:
         handle, path = tempfile.mkstemp(prefix="habertakip-")
         os.close(handle)
         try:
             result = subprocess.run(
-                [curl, "-sS", "-L", "--compressed", "--max-redirs", "5", "--max-time", str(timeout),
-                 "--max-filesize", str(MAX_DOWNLOAD), "-A", USER_AGENT,
-                 "-H", "Accept: application/rss+xml, application/atom+xml, application/xml, text/xml, text/html;q=0.9, */*;q=0.5",
-                 "-o", path, "-w", "%{http_code} %{url_effective} %{content_type}", "--", url],
-                capture_output=True, text=True, timeout=timeout + 5)
+                curl + ["-sS", "-L", "--max-redirs", "5", "--max-time", str(timeout),
+                 "--max-filesize", str(limit), "-A", USER_AGENT]
+                + [option for name, value in headers.items() for option in ("-H", "%s: %s" % (name, value))]
+                + ["-o", path, "-w", "%{http_code} %{url_effective} %{content_type}", "--", url],
+                capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout + 5, **NO_WINDOW)
             if result.returncode != 0:
                 raise FetchError(CURL_ERRORS.get(result.returncode, "Site okunamadı (curl hata kodu %d)." % result.returncode))
             status, final, *rest = result.stdout.split(" ", 2) + [""]
             if not status.startswith("2"):
                 raise FetchError("Site HTTP %s yanıtı verdi." % status)
             with open(path, "rb") as stream:
-                return stream.read(MAX_DOWNLOAD + 1)[:MAX_DOWNLOAD], final or url, (rest[0] if rest else "").strip()
+                return stream.read(limit + 1)[:limit], final or url, (rest[0] if rest else "").strip()
         except subprocess.TimeoutExpired:
             raise FetchError("Site %d saniyede yanıt vermedi." % timeout)
         finally:
@@ -135,10 +167,10 @@ def fetch(url, timeout=20):
                 os.unlink(path)
             except OSError:
                 pass
-    request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+    request = urllib.request.Request(url, headers=dict(headers, **{"User-Agent": USER_AGENT}))
     try:
         with urllib.request.urlopen(request, timeout=timeout) as response:
-            return response.read(MAX_DOWNLOAD), response.geturl(), response.headers.get("Content-Type", "")
+            return response.read(limit), response.geturl(), response.headers.get("Content-Type", "")
     except urllib.error.HTTPError as error:
         raise FetchError("Site HTTP %d yanıtı verdi." % error.code)
     except (urllib.error.URLError, OSError) as error:
@@ -490,6 +522,156 @@ class Scanner:
             store.changed()
 
 
+# --- Otomatik güncelleme -------------------------------------------------------
+
+UPDATE_REPO = "merdan50-hash/Haber-Takip"
+UPDATE_ASSET = "haber-takip-kurulum-%s.zip"
+UPDATE_PACKAGE_ROOT = "HaberTakip/"
+
+
+def version_tuple(value):
+    numbers = re.findall(r"\d+", str(value or ""))
+    return tuple(int(number) for number in numbers[:4]) if numbers else (0,)
+
+
+def read_extension_version(directory):
+    try:
+        with open(os.path.join(directory, "manifest.json"), encoding="utf-8") as stream:
+            return json.load(stream).get("version")
+    except (OSError, ValueError, AttributeError):
+        return None
+
+
+def write_atomic(path, data):
+    directory = os.path.dirname(path)
+    os.makedirs(directory, exist_ok=True)
+    handle, temp = tempfile.mkstemp(dir=directory, prefix=".guncelleme-")
+    try:
+        with os.fdopen(handle, "wb") as stream:
+            stream.write(data)
+        os.replace(temp, path)
+    except BaseException:
+        try:
+            os.unlink(temp)
+        except OSError:
+            pass
+        raise
+
+
+class Updater:
+    """GitHub'daki son sürümü denetler; yenisi varsa hizmeti ve eklenti dosyalarını günceller.
+
+    Eklenti, hizmetin bildirdiği extensionVersion kendi sürümünden yeniyse kendini yeniden yükler.
+    """
+
+    def __init__(self, store, extension_dir, data_dir, repo=UPDATE_REPO, interval=900, api="https://api.github.com"):
+        self.store, self.extension_dir, self.data_dir = store, extension_dir, data_dir
+        self.repo, self.interval, self.api = repo, interval, api.rstrip("/")
+        self.service_path = os.path.abspath(__file__)
+        self.extension_version = read_extension_version(extension_dir) if extension_dir else None
+        self.state = {"state": "bekliyor", "latest": None, "error": None, "checked": None}
+        self.wake = threading.Event()
+
+    def headers(self):
+        headers = {"Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28"}
+        try:  # depo gizliyse okuma yetkili bir GitHub anahtarı bu dosyaya yazılabilir
+            with open(os.path.join(self.data_dir, "github-token"), encoding="utf-8-sig") as stream:
+                token = stream.read().strip()
+            if token:
+                headers["Authorization"] = "Bearer " + token
+        except OSError:
+            pass
+        return headers
+
+    def run(self, first_delay=15):
+        self.wake.wait(first_delay)
+        while True:
+            self.wake.clear()
+            if self.check():
+                self.restart()
+            self.wake.wait(self.interval)
+
+    def check(self):
+        """Yeni sürüm kurulduysa True döndürür."""
+        self.state.update(state="denetleniyor", error=None)
+        try:
+            body, _, _ = fetch("%s/repos/%s/releases/latest" % (self.api, self.repo), timeout=20, headers=self.headers())
+            release = json.loads(body.decode("utf-8"))
+            latest = str(release.get("tag_name") or "").lstrip("vV")
+            self.state["latest"] = latest
+            if version_tuple(latest) <= version_tuple(VERSION):
+                self.state.update(state="güncel", checked=time.time())
+                return False
+            name = UPDATE_ASSET % latest
+            asset = next((item for item in release.get("assets") or [] if item.get("name") == name), None)
+            if not asset:
+                raise FetchError("%s sürümünde %s paketi yok." % (latest, name))
+            headers = self.headers()
+            if "Authorization" in headers:
+                url, headers["Accept"] = asset["url"], "application/octet-stream"
+            else:
+                url, headers = asset["browser_download_url"], {}
+            package, _, _ = fetch(url, timeout=120, headers=headers, limit=64 * 1024 * 1024)
+            digest = str(asset.get("digest") or "")
+            if digest.startswith("sha256:") and hashlib.sha256(package).hexdigest() != digest[7:].lower():
+                raise FetchError("İndirilen paketin SHA-256 özeti tutmuyor.")
+            self.install(package, latest)
+            self.state.update(state="kuruldu", checked=time.time())
+            log("Haber Takip %s sürümüne güncellendi." % latest)
+            return True
+        except FetchError as error:
+            message = str(error)
+            if "HTTP 404" in message:
+                message = "GitHub'da yayınlanmış sürüm bulunamadı (depo gizliyse github-token gerekir)."
+            self.state.update(state="hata", error=message, checked=time.time())
+        except Exception as error:
+            log("Güncelleme hatası:", repr(error))
+            self.state.update(state="hata", error="Güncelleme kurulamadı: %s" % error.__class__.__name__, checked=time.time())
+        return False
+
+    def install(self, package, latest):
+        import io
+        files, service = {}, None
+        with zipfile.ZipFile(io.BytesIO(package)) as archive:
+            for info in archive.infolist():
+                name = info.filename.replace("\\", "/")
+                if info.is_dir() or not name.startswith(UPDATE_PACKAGE_ROOT):
+                    continue
+                relative = name[len(UPDATE_PACKAGE_ROOT):]
+                parts = relative.split("/")
+                if any(part in ("", ".", "..") or ":" in part for part in parts):
+                    raise FetchError("Güncelleme paketinde geçersiz dosya yolu: %s" % name)
+                if relative == "hizmet/haber_takip_hizmeti.py":
+                    service = archive.read(info)
+                elif parts[0] == "eklenti" and len(parts) > 1 and relative != "eklenti/bridge-config.js":
+                    files["/".join(parts[1:])] = archive.read(info)
+        if not service or "manifest.json" not in files:
+            raise FetchError("Güncelleme paketi eksik.")
+        if version_tuple(json.loads(files["manifest.json"].decode("utf-8")).get("version")) != version_tuple(latest):
+            raise FetchError("Güncelleme paketinin sürümü etiketle uyuşmuyor.")
+        compile(service, self.service_path, "exec")  # bozuk bir hizmet dosyası kurulmasın
+        if self.extension_dir:
+            for relative, data in sorted(files.items(), key=lambda item: item[0] == "manifest.json"):
+                write_atomic(os.path.join(self.extension_dir, *relative.split("/")), data)  # manifest en son
+            self.extension_version = read_extension_version(self.extension_dir)
+        write_atomic(self.service_path, service)
+
+    def restart(self):
+        """Yeni hizmet dosyasıyla aynı süreç kimliğinde yeniden başlar."""
+        self.store.save()
+        log("Hizmet yeni sürümle yeniden başlatılıyor.")
+        command = [sys.executable] + sys.argv
+        if os.name != "nt":
+            os.execv(sys.executable, command)
+        # Windows'ta execv boşluklu yolları bozar; yeni süreci ayrı başlatıp bu süreci kapat.
+        flags = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
+        try:
+            subprocess.Popen(command, creationflags=flags | subprocess.CREATE_BREAKAWAY_FROM_JOB, close_fds=True)
+        except OSError:
+            subprocess.Popen(command, creationflags=flags, close_fds=True)
+        os._exit(0)
+
+
 # --- HTTP API ----------------------------------------------------------------
 
 class ApiError(Exception):
@@ -498,7 +680,7 @@ class ApiError(Exception):
         self.status = status
 
 
-def make_handler(store, scanner, token, port):
+def make_handler(store, scanner, token, port, updater=None):
     allowed_hosts = {"127.0.0.1:%d" % port, "localhost:%d" % port}
 
     def status():
@@ -516,7 +698,9 @@ def make_handler(store, scanner, token, port):
                             "partialError": state["partialError"], "errors": state["errors"],
                             "next": int(state["due"] * 1000) if state["error"] else None})
         return {"sites": [site["url"] for site in sites], "sources": sources, "revision": store.revision,
-                "poll": store.data["poll"], "unread": unread, "version": VERSION}
+                "poll": store.data["poll"], "unread": unread, "version": VERSION,
+                "extensionVersion": updater.extension_version if updater else None,
+                "update": dict(updater.state) if updater else None}
 
     def articles(params):
         query = tr_lower(params.get("query", [""])[0].strip())
@@ -690,19 +874,49 @@ def main():
     parser.add_argument("--data", required=True, help="kayıt klasörü")
     parser.add_argument("--port", type=int, default=18765)
     parser.add_argument("--token-file", help="erişim anahtarı dosyası (varsayılan: <data>/token)")
+    parser.add_argument("--log", help="günlük dosyası (varsayılan: standart hata çıktısı)")
+    parser.add_argument("--extension-dir", help="kurulu eklenti klasörü (otomatik güncelleme için)")
+    parser.add_argument("--no-update", action="store_true", help="GitHub'dan otomatik güncellemeyi kapatır")
+    parser.add_argument("--update-repo", default=UPDATE_REPO, help=argparse.SUPPRESS)
+    parser.add_argument("--update-api", default="https://api.github.com", help=argparse.SUPPRESS)
+    parser.add_argument("--update-interval", type=int, default=900, help=argparse.SUPPRESS)
     parser.add_argument("--allow-private-hosts", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args()
+    if args.log:
+        try:
+            if os.path.getsize(args.log) > 1024 * 1024:
+                os.replace(args.log, args.log + ".1")
+        except OSError:
+            pass
+        sys.stderr = open(args.log, "a", encoding="utf-8", buffering=1)
     ALLOW_PRIVATE_HOSTS = args.allow_private_hosts
 
     os.makedirs(args.data, exist_ok=True)
-    with open(args.token_file or os.path.join(args.data, "token"), encoding="utf-8") as stream:
+    with open(args.token_file or os.path.join(args.data, "token"), encoding="utf-8-sig") as stream:
         token = stream.read().strip()
     if len(token) < 16:
         sys.exit("Erişim anahtarı çok kısa veya boş.")
 
     store = Store(os.path.join(args.data, "durum.json"))
     scanner = Scanner(store)
+    updater = Updater(store, args.extension_dir, args.data, args.update_repo, max(60, args.update_interval), args.update_api)
+    if args.no_update or not args.extension_dir:
+        updater.state["state"] = "kapalı"
+    # Windows'ta SO_REUSEADDR, kullanımdaki bir bağlantı noktasının ikinci kez açılmasına izin verir.
+    ThreadingHTTPServer.allow_reuse_address = os.name != "nt"
+    handler = make_handler(store, scanner, token, args.port, updater)
+    for attempt in range(20):  # güncelleme sonrası yeniden başlarken eski soketin kapanmasını bekle
+        try:
+            server = ThreadingHTTPServer(("127.0.0.1", args.port), handler)
+            break
+        except OSError as error:
+            if attempt == 19:
+                log("Bağlantı noktası %d açılamadı (başka bir program kullanıyor olabilir):" % args.port, error)
+                sys.exit(3)
+            time.sleep(0.5)
     threading.Thread(target=scanner.run, daemon=True).start()
+    if updater.state["state"] != "kapalı":
+        threading.Thread(target=updater.run, daemon=True).start()
 
     def saver():
         while True:
@@ -710,7 +924,6 @@ def main():
             store.save()
     threading.Thread(target=saver, daemon=True).start()
 
-    server = ThreadingHTTPServer(("127.0.0.1", args.port), make_handler(store, scanner, token, args.port))
     server.daemon_threads = True
     log("Haber Takip hizmeti %s, http://127.0.0.1:%d adresinde çalışıyor." % (VERSION, args.port))
     try:

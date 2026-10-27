@@ -14,7 +14,7 @@ const LOOPBACK = new Set(["127.0.0.1"]);
 let sound = false, audio, status = null, articles = [], total = 0, sel = null, query = "", unreadOnly = false;
 let visibleLimit = PAGE_SIZE, generation = 0, articleGeneration = -1, articleRevision = null;
 let refreshing = false, refreshAgain = false, imported = false, importData, connected = false, configBusy = false, ready = false;
-let previousUnread = null, unseen = 0, messageKind = "", lastChips = "", messageTimer, searchTimer;
+let previousUnread = null, unseen = 0, messageKind = "", lastChips = "", messageTimer, searchTimer, reloading = false;
 const pendingRead = new Set();
 
 function notify(message, kind = "action") {
@@ -146,9 +146,36 @@ function beep() {
     oscillator.start(); oscillator.stop(audio.currentTime + .12);
   } catch { }
 }
+function newer(a, b) {
+  const x = String(a).split(".").map(Number), y = String(b).split(".").map(Number);
+  for (let i = 0; i < Math.max(x.length, y.length); i++) {
+    if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) > (y[i] || 0);
+  }
+  return false;
+}
+// Hizmet eklenti dosyalarını yeni sürüme güncellediyse eklentiyi diskteki yeni sürümle yeniden yükler.
+async function reloadIfUpdated(value) {
+  const next = value.extensionVersion;
+  if (reloading || typeof next !== "string" || !newer(next, VERSION)) return;
+  reloading = true;
+  try {
+    const {reloadedFor} = await chrome.storage.local.get("reloadedFor");
+    if (reloadedFor === next) return; // dosyalar yenilenmemiş; yeniden yükleme döngüsüne girme
+    await chrome.storage.local.set({reloadedFor: next, reopenApp: document.hasFocus() ? "active" : "background"});
+    chrome.runtime.reload();
+  } catch { }
+}
+function updateText(update) {
+  if (!update) return "";
+  if (update.state === "hata") return `Otomatik güncelleme: ${update.error}`;
+  if (update.state === "kapalı") return "Otomatik güncelleme kapalı";
+  return update.latest ? `Otomatik güncelleme açık · GitHub'daki son sürüm ${update.latest}` : "Otomatik güncelleme açık";
+}
 function acceptStatus(value) {
   if (!value || !Array.isArray(value.sites) || !Array.isArray(value.sources) || value.revision === undefined) throw new Error("Haber hizmetinin durum yanıtı eksik.");
   status = value; connected = true;
+  reloadIfUpdated(value);
+  $("#ver").title = updateText(value.update);
   if (!configBusy && POLLS.includes(value.poll)) $("#iv").value = value.poll;
   if (sel && !value.sites.some(url => host(url) === sel)) { sel = null; generation++; visibleLimit = PAGE_SIZE; }
   const unread = Number(value.unread) || 0;
@@ -286,7 +313,11 @@ $("#ver").textContent = VERSION;
 document.title = TITLE;
 
 (async () => {
-  const stored = await chrome.storage.local.get(["sites", "feeds", "poll", "articles", "dates", "lastVisit", "prev", "sound", BACKUP_KEY]);
+  const stored = await chrome.storage.local.get(["sites", "feeds", "poll", "articles", "dates", "lastVisit", "prev", "sound", "lastVersion", BACKUP_KEY]);
+  if (stored.lastVersion !== VERSION) {
+    if (stored.lastVersion) notify(`Haber Takip ${VERSION} sürümüne güncellendi.`);
+    await chrome.storage.local.set({lastVersion: VERSION});
+  }
   sound = !!stored.sound; setSoundButton();
   importData = {
     sites: Array.isArray(stored.sites) ? stored.sites : DEFAULT,
