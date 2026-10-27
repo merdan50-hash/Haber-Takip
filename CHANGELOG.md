@@ -1,5 +1,8 @@
 # Haber Takip — Değişiklikler
 
+## 1.4.2
+- Linux kurulum aracı `sudo` ile çalıştırıldığında durur ve normal kullanıcıyla nasıl çalıştırılacağını gösterir. Root olarak kurulumda eklenti klasörü `/root` altına gidiyor, normal kullanıcıyla açılan tarayıcı onu okuyamıyordu.
+
 ## 1.4.1
 - **Kurulum, 18765 numaralı bağlantı noktası başka bir programdayken artık yarıda kesilmiyor.** O programın adını gösterip 18766–18799 arasında boş bir bağlantı noktası seçiyor ve eklentiye o adresi yazıyor. Seçilen numara sonraki kurulumlarda da korunuyor.
 - Eklenti, kurulum aracının hazırladığı klasörden yüklenmediğinde hangi klasörün yükleneceğini açıkça söylüyor; başlıkta "Kurulum tamamlanmamış" yazıyor.

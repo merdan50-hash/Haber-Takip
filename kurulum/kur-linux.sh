@@ -17,6 +17,15 @@ hata() { printf '\n\033[31mHATA:\033[0m %s\n' "$1" >&2; exit 1; }
 adim() { printf '\033[1m• %s\033[0m\n' "$1"; }
 
 [ "$(uname)" = "Linux" ] || hata "Bu kurulum aracı Linux içindir."
+# Hizmet ve eklenti klasörü, tarayıcıyı kullanan kişinin ev klasörüne kurulmalı; sudo ile kurulursa
+# /root altına gider ve normal kullanıcıyla açılan tarayıcı eklenti klasörünü okuyamaz.
+if [ "$(id -u)" = 0 ] && [ -n "${SUDO_USER:-}" ] && [ "$SUDO_USER" != root ]; then
+  hata "Kurulum aracını root olarak değil, tarayıcıyı kullandığınız hesapla çalıştırın:
+    exit                      (root oturumundan çıkın)
+    bash \"$PAKET/kur-linux.sh\"
+  ya da tek satırda:  sudo -u $SUDO_USER bash \"$PAKET/kur-linux.sh\""
+fi
+[ "$(id -u)" = 0 ] && printf '\033[33mUyarı:\033[0m root olarak kuruluyor; tarayıcınız da root olarak çalışmıyorsa kurulumu normal kullanıcıyla yapın.\n'
 [ -f "$PAKET/hizmet/haber_takip_hizmeti.py" ] && [ -f "$PAKET/eklenti/manifest.json" ] \
   || hata "Kurulum dosyaları eksik. Zip dosyasını tamamen açıp kur-linux.sh dosyasını klasörün içinden çalıştırın."
 

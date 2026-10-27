@@ -30,7 +30,7 @@ from datetime import datetime, timezone
 from html.parser import HTMLParser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-VERSION = "1.4.1"
+VERSION = "1.4.2"
 POLLS = (5, 10, 15, 30, 60, 120, 300)
 # Bazı haber siteleri tarayıcıya benzemeyen istekleri 403 ile reddediyor.
 USER_AGENT = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
